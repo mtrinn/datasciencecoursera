@@ -1,0 +1,171 @@
+---
+title: "Prediction Assignment Report"
+author: "mtrinn"
+date: "September 17, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Prediction Assignment Report
+
+This is an assignment based on fitness devices that track personal activity and movements. We want to predict different positions (the classes A, B to E) baed on different measured feature. For more details see <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>.
+
+We start to load the data:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(caret)
+library(kernlab)
+library(AppliedPredictiveModeling)
+library(ElemStatLearn)
+library(pgmm)
+library(rpart)
+library(gbm)
+library(lubridate)
+library(forecast)
+library(e1071)
+library(readr)
+library(dplyr)
+library(randomForest)
+
+###### load the data 
+
+training<-read_csv("pml-training.csv")
+testing<-read_csv("pml-testing.csv")
+
+head(training[,1:10],5)
+
+head(testing[,1:10],5)
+
+
+```
+
+## Calculating statistics
+
+We transform the data and calculate some statistics on the training set:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+###### select columns wit numeric only
+
+nums <- sapply(training, is.numeric)
+
+numstraining<-training[,nums]
+
+numstraining<-numstraining[,5:ncol(numstraining)]
+
+nums <- sapply(testing, is.numeric)
+
+numstesting<-testing[,nums]
+
+numstesting<-numstesting[,5:ncol(numstesting)]
+
+###### not all the fields are available in testing_df
+
+numstraining<-numstraining[,names(numstesting)[1:52]]
+                   
+
+###### bind with the class
+
+newtraining<-cbind(training$classe,numstraining)
+
+##### rename classe
+
+names(newtraining)[1]<-"classe"
+
+
+###### convert to nice table
+
+training_df<-tbl_df(newtraining)
+
+testing_df<-tbl_df(numstesting)
+
+
+
+
+
+###### group by class
+
+classes<-group_by(training_df,classe)
+
+###### calculate feature means by class
+
+straining<-summarise_all(classes, funs(mean(., na.rm = TRUE)))
+
+straining[1:10]
+
+```
+
+## Feature Plots
+
+We show some plots of the different features by classe. Note that there many of them so we show only the first couple features.
+
+
+```{r , echo=FALSE}
+###### plot features by class
+
+for (i in 3:6)
+
+# box plot
+boxplot(as.matrix(training_df[,i]) ~ classe, data = training, xlab="classes", col = "red",main=names(straining[,i])[1])
+```
+
+## Training of the model
+
+Now we train the model with Random Forest:
+
+```{r , echo=FALSE}
+##### replace NA by 0
+
+training_df[is.na(training_df)] <- 0
+
+testing_df[is.na(testing_df)] <- 0
+
+
+
+##### run a random forest (rf) model on training data
+
+modFit_rf<-randomForest(classe ~ ., data=training_df, importance=TRUE,
+                        proximity=TRUE)
+
+print(modFit_rf)
+```
+
+
+We see that the eror rate is low at 0.28% meaning the accuracy on 99.72% on training data.
+
+## Cross-validation of the model
+
+Now we train the model with Random Forest and cross-validation:
+
+```{r , echo=FALSE}
+
+
+# define training control
+train_control <- trainControl(method="cv", number=10)
+
+##### run a random forest (rf) model on training data
+
+modFit_rf_cv<-randomForest(classe ~ ., data=training_df, trControl=train_control, importance=TRUE,
+                        proximity=TRUE)
+# summarize results
+
+print(modFit_rf_cv)
+```
+
+
+We produce the predictions on the testing data.
+
+```{r , echo=FALSE}
+
+##### final prediction results
+
+prediction_rf=predict(modFit_rf,newdata=testing_df)
+
+
+prediction_rf
+```
+
+
+
